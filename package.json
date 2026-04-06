@@ -1,0 +1,44 @@
+{
+  "name": "skill-market-cli",
+  "version": "1.0.1",
+  "description": "CLI tool for managing skills on Skill Market",
+  "main": "src/index.js",
+  "bin": {
+    "skill-market-cli": "bin/skill-market-cli.js",
+    "smcli": "bin/skill-market-cli.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "skill",
+    "cli",
+    "market",
+    "ai",
+    "kimi",
+    "claude",
+    "cursor"
+  ],
+  "author": "Kirigaya",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.0.0",
+    "fs-extra": "^11.1.1",
+    "inquirer": "^8.2.6",
+    "open": "^8.4.2",
+    "yaml": "^2.3.4"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/skill-market-cli.git"
+  },
+  "homepage": "https://kirigaya.cn/ktools/skillmanager",
+  "bugs": {
+    "url": "https://github.com/yourusername/skill-market-cli/issues"
+  }
+}

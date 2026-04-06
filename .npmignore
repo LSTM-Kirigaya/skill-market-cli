@@ -1,0 +1,14 @@
+# 不发布到 npm 的文件
+node_modules/
+*.log
+.DS_Store
+.git/
+.gitignore
+.env
+.env.local
+.idea/
+.vscode/
+coverage/
+*.test.js
+__tests__/
+.nyc_output/
