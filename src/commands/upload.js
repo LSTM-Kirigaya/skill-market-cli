@@ -2,174 +2,298 @@ const fs = require('fs-extra');
 const path = require('path');
 const chalk = require('chalk');
 const inquirer = require('inquirer');
-const YAML = require('yaml');
 const { isLoggedIn } = require('../auth/token-store');
 const apiClient = require('../api/client');
+const { runExampleAndCollect } = require('../lib/run-example-collect');
+const {
+  parseSkillMarkdown,
+  loadDotSkillExamples,
+  promptOnlyExamples
+} = require('../lib/skill-upload-helpers');
 
-async function upload(skillPath, options) {
+/**
+ * 交互补全：名称、描述、标签、模型、rootUrl、用户案例 + 可选运行采集轨迹
+ */
+async function upload(skillPath, options = {}) {
   if (!isLoggedIn()) {
-    console.error(chalk.red('❌ Please login first: skill-market-cli login\n'));
+    console.error(chalk.red('请先登录：skill-market-cli login\n'));
     process.exit(1);
   }
 
-  // 检查路径
   if (!fs.existsSync(skillPath)) {
-    console.error(chalk.red(`❌ Path not found: ${skillPath}`));
+    console.error(chalk.red(`路径不存在：${skillPath}`));
     process.exit(1);
   }
 
-  // 确定 SKILL.md 文件路径
   let skillFilePath;
   const stats = fs.statSync(skillPath);
-  
   if (stats.isDirectory()) {
     skillFilePath = path.join(skillPath, 'SKILL.md');
     if (!fs.existsSync(skillFilePath)) {
-      console.error(chalk.red(`❌ SKILL.md not found in directory: ${skillPath}`));
+      console.error(chalk.red(`目录中未找到 SKILL.md：${skillPath}`));
       process.exit(1);
     }
   } else {
     skillFilePath = skillPath;
   }
 
-  console.log(chalk.blue('📖 Reading SKILL.md...\n'));
-  
-  // 读取并解析 SKILL.md
-  const skillContent = fs.readFileSync(skillFilePath, 'utf-8');
-  const { frontmatter, examples } = parseSkillFile(skillContent);
+  const skillDir = path.dirname(skillFilePath);
+  console.log(chalk.gray(`读取：${skillFilePath}\n`));
 
-  // 收集信息
+  const skillContent = fs.readFileSync(skillFilePath, 'utf-8');
+  const { frontmatter, examples: examplesFromMd } = parseSkillMarkdown(skillContent);
+
   let name = options.name || frontmatter?.name;
-  let description = options.description || frontmatter?.purpose || frontmatter?.description;
-  let tags = options.tags ? options.tags.split(',').map(t => t.trim()) : (frontmatter?.tags || []);
+  let description =
+    options.description || frontmatter?.purpose || frontmatter?.description;
+  let tags = options.tags
+    ? options.tags.split(',').map((t) => t.trim())
+    : frontmatter?.tags || [];
   let model = options.model || frontmatter?.model;
   let rootUrl = frontmatter?.rootUrl;
 
-  // 如果缺少必要信息，询问用户
-  const questions = [];
-  
-  if (!name) {
-    questions.push({
-      type: 'input',
-      name: 'name',
-      message: 'Skill name:',
-      validate: input => input.length > 0 || 'Name is required'
-    });
-  }
-  
-  if (!description) {
-    questions.push({
-      type: 'input',
-      name: 'description',
-      message: 'Purpose/Description:',
-      validate: input => input.length > 0 || 'Description is required'
-    });
-  }
+  const fromJson = loadDotSkillExamples(skillDir);
+  let usageExamples = fromJson;
 
-  if (questions.length > 0) {
-    const answers = await inquirer.prompt(questions);
-    name = name || answers.name;
-    description = description || answers.description;
-  }
-
-  // 如果没有 examples，询问是否运行案例采集
-  let usageExamples = examples;
   if (!usageExamples || usageExamples.length === 0) {
-    const { runExamples } = await inquirer.prompt([{
-      type: 'confirm',
-      name: 'runExamples',
-      message: 'No usage examples found. Do you want to run example collection now?',
-      default: true
-    }]);
-
-    if (runExamples) {
-      console.log(chalk.gray('\nPlease run: skill-market-cli run-example ' + skillPath));
-      console.log(chalk.gray('Then upload again with the collected examples.\n'));
-      return;
+    const raw = promptOnlyExamples(examplesFromMd);
+    if (raw.length > 0) {
+      usageExamples = raw.map((ex) => ({
+        prompt: ex.prompt,
+        aiResponses: ex.aiResponses || [],
+        model: ex.model || model || ''
+      }));
     }
   }
 
-  // 确认上传
-  console.log(chalk.gray('\n--- Upload Summary ---'));
-  console.log(`Name: ${chalk.bold(name)}`);
-  console.log(`Description: ${description}`);
-  console.log(`Tags: ${tags.join(', ') || 'none'}`);
-  console.log(`Model: ${model || 'not specified'}`);
-  console.log(`Examples: ${usageExamples?.length || 0}`);
-  console.log();
+  const needName = !name || !String(name).trim();
+  const needDesc = !description || !String(description).trim();
+  if (needName || needDesc) {
+    const answers = await inquirer.prompt(
+      [
+        needName && {
+          type: 'input',
+          name: 'name',
+          message: 'Skill 名称（必填）：',
+          validate: (input) => (input && String(input).trim() ? true : '不能为空')
+        },
+        needDesc && {
+          type: 'input',
+          name: 'description',
+          message: '用途 / 描述（必填）：',
+          validate: (input) => (input && String(input).trim() ? true : '不能为空')
+        }
+      ].filter(Boolean)
+    );
+    if (answers.name) name = answers.name;
+    if (answers.description) description = answers.description;
+  }
 
-  const { confirm } = await inquirer.prompt([{
-    type: 'confirm',
-    name: 'confirm',
-    message: 'Upload this skill?',
-    default: true
-  }]);
+  // 模型默认值（用于采集与提交）
+  if (!model || !String(model).trim()) {
+    const { m } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'm',
+        message: '推荐模型（用于案例采集与提交，建议与线上一致）：',
+        default: 'deepseek-chat'
+      }
+    ]);
+    model = m || 'deepseek-chat';
+  }
+
+  const modelFinal = String(model).trim();
+
+  // 必须有至少一条「用户案例」且含轨迹：若无则交互式收集
+  usageExamples = await ensureUsageExamplesWithTrace({
+    initial: usageExamples,
+    model: modelFinal
+  });
+
+  if (!tags || tags.length === 0) {
+    const { tagStr } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'tagStr',
+        message: '标签（逗号分隔，至少一个）：',
+        default: 'general',
+        validate: (input) =>
+          input && String(input).trim() ? true : '至少填写一个标签'
+      }
+    ]);
+    tags = tagStr.split(',').map((t) => t.trim()).filter(Boolean);
+  }
+
+  if (!rootUrl || !String(rootUrl).trim()) {
+    const { ru } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'ru',
+        message: 'SKILL 根资源 URL（可填 GitHub raw 或本地文件）：',
+        default: `file://${path.resolve(skillFilePath)}`
+      }
+    ]);
+    rootUrl = ru || `file://${path.resolve(skillFilePath)}`;
+  }
+
+  console.log(chalk.gray('\n--- 上传摘要 ---'));
+  console.log(`名称：${chalk.bold(name)}`);
+  console.log(`描述：${description}`);
+  console.log(`标签：${tags.join(', ')}`);
+  console.log(`模型：${modelFinal}`);
+  console.log(`rootUrl：${rootUrl}`);
+  console.log(`案例条数：${usageExamples.length}（每条含 prompt + 轨迹）`);
+  console.log('');
+
+  let confirm = options.yes === true;
+  if (!confirm) {
+    const ans = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: '确认提交到 Skill Market？',
+        default: true
+      }
+    ]);
+    confirm = ans.confirm;
+  }
 
   if (!confirm) {
-    console.log(chalk.yellow('Upload cancelled.\n'));
+    console.log(chalk.yellow('已取消上传。\n'));
     return;
   }
 
-  // 上传
+  // 写入 .skill-examples.json 便于复查与再次上传
   try {
-    console.log(chalk.blue('\n📤 Uploading...\n'));
+    const outPath = path.join(skillDir, '.skill-examples.json');
+    fs.writeJsonSync(
+      outPath,
+      {
+        model: modelFinal,
+        examples: usageExamples.map((e) => ({
+          prompt: e.prompt,
+          aiResponses: e.aiResponses,
+          model: e.model || modelFinal
+        }))
+      },
+      { spaces: 2 }
+    );
+    console.log(chalk.gray(`已保存本地示例与轨迹：${outPath}`));
+  } catch {
+    // ignore
+  }
 
+  try {
+    console.log(chalk.gray('\n正在上传…\n'));
+
+    const tagsFinal = tags.map((t) => String(t).trim()).filter(Boolean);
     const data = {
-      name,
-      purpose: description,
-      rootUrl: rootUrl || '',
-      tags,
-      usageExamples: usageExamples || [],
-      model
+      name: String(name).trim(),
+      purpose: String(description).trim(),
+      rootUrl: String(rootUrl).trim(),
+      tags: tagsFinal,
+      usageExamples,
+      model: modelFinal
     };
 
     const response = await apiClient.uploadSkill(data);
 
     if (response.code === 200) {
-      console.log(chalk.green('✅ Skill uploaded successfully!'));
-      console.log(chalk.cyan(`📝 Skill ID: ${response.data.id}`));
-      console.log();
+      console.log(chalk.green('上传成功'));
+      console.log(chalk.gray(`Skill ID：${response.data.id}`));
+      console.log('');
     } else {
-      console.error(chalk.red('❌ Upload failed:'), response.data || 'Unknown error');
+      console.error(chalk.red('上传失败：'), response.data || '未知错误');
       process.exit(1);
     }
   } catch (error) {
-    console.error(chalk.red('❌ Upload error:'), error.message);
+    console.error(chalk.red('上传出错：'), error.message);
     process.exit(1);
   }
 }
 
-// 解析 SKILL.md 文件
-function parseSkillFile(content) {
-  let frontmatter = null;
-  let examples = [];
+/**
+ * 保证至少一条案例；若仅有 prompt 无轨迹，则询问是否运行采集
+ */
+async function ensureUsageExamplesWithTrace({ initial, model }) {
+  let list = Array.isArray(initial) ? [...initial] : [];
 
-  // 解析 front matter
-  const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
-  if (frontmatterMatch) {
-    try {
-      frontmatter = YAML.parse(frontmatterMatch[1]);
-    } catch (e) {
-      // 忽略解析错误
+  const hasTrace = (ex) =>
+    ex &&
+    ex.prompt &&
+    String(ex.prompt).trim() &&
+    Array.isArray(ex.aiResponses) &&
+    ex.aiResponses.length > 0;
+
+  const valid = list.filter((ex) => ex && String(ex.prompt || '').trim());
+  const allHaveTrace = valid.length > 0 && valid.every(hasTrace);
+
+  if (allHaveTrace) {
+    return valid.map((ex) => ({
+      prompt: String(ex.prompt).trim(),
+      aiResponses: ex.aiResponses,
+      model: ex.model || model
+    }));
+  }
+
+  if (valid.length > 0 && !allHaveTrace) {
+    console.log(chalk.gray('检测到 SKILL.md 中已有案例文本，但缺少轨迹。将逐条运行采集。\n'));
+    const out = [];
+    for (const ex of valid) {
+      const trace = await runExampleAndCollect(ex.prompt, model);
+      out.push({
+        prompt: String(ex.prompt).trim(),
+        aiResponses: trace,
+        model
+      });
     }
+    return out;
   }
 
-  // 解析 usage examples（如果文件中有）
-  const examplesMatch = content.match(/## Usage Examples?\s*\n([\s\S]*?)(?=##|$)/i);
-  if (examplesMatch) {
-    // 简单解析示例 - 可以根据实际格式改进
-    const exampleText = examplesMatch[1];
-    const exampleBlocks = exampleText.split(/\n\n+/).filter(b => b.trim());
-    
-    examples = exampleBlocks.map(block => {
-      const lines = block.split('\n').filter(l => l.trim());
-      return {
-        prompt: lines.join('\n')
-      };
+  console.log(
+    chalk.yellow(
+      '上传至 Skill Market 需要至少一条「用户案例」及对应采集轨迹（thinking / toolcall / message）。\n'
+    )
+  );
+
+  const collected = [];
+  let addMore = true;
+  while (addMore) {
+    const { promptText } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'promptText',
+        message: '请输入一条用户测试案例（终端可多行请用 \\n 分段，或分多次添加）：',
+        validate: (input) =>
+          input && String(input).trim() ? true : '案例内容不能为空'
+      }
+    ]);
+
+    const aiResponses = await runExampleAndCollect(promptText.trim(), model);
+
+    collected.push({
+      prompt: promptText.trim(),
+      aiResponses,
+      model
     });
+
+    const { again } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'again',
+        message: '是否再添加一条用户案例？',
+        default: false
+      }
+    ]);
+    addMore = again;
   }
 
-  return { frontmatter, examples };
+  if (collected.length === 0) {
+    console.error(chalk.red('未提供任何用户案例，无法上传。'));
+    process.exit(1);
+  }
+
+  return collected;
 }
 
 module.exports = upload;

@@ -4,21 +4,21 @@ const apiClient = require('../api/client');
 
 async function logout() {
   if (!isLoggedIn()) {
-    console.log(chalk.yellow('⚠️  You are not logged in.\n'));
+    console.log(chalk.yellow('当前未登录，无需登出。'));
+    console.log('');
     return;
   }
 
   try {
-    // 通知服务器登出（撤销 Token）
     await apiClient.client.post('/oauth/logout');
   } catch (e) {
-    // 忽略错误
+    // 忽略网络错误，仍清除本地凭证
   }
 
-  // 清除本地 Token
   clearToken();
 
-  console.log(chalk.green('✅ Logged out successfully.\n'));
+  console.log(chalk.green('已登出本地凭证'));
+  console.log('');
 }
 
 module.exports = logout;

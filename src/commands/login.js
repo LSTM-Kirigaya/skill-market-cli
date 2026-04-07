@@ -3,16 +3,15 @@ const { isLoggedIn } = require('../auth/token-store');
 const { login: oauthLogin } = require('../auth/oauth');
 
 async function login(options) {
-  // 检查是否已登录
   if (isLoggedIn()) {
-    console.log(chalk.yellow('⚠️  You are already logged in.'));
-    console.log(chalk.gray('Use "skill-market-cli logout" to logout first.\n'));
+    console.log(chalk.yellow('当前已处于登录状态。'));
+    console.log(chalk.gray('如需重新登录，请先执行：skill-market-cli logout'));
+    console.log('');
     return;
   }
 
-  // 执行登录（--mode 已在全局 preAction 中写入配置并设置 API 基址）
   const success = await oauthLogin(options);
-  
+
   if (!success) {
     process.exit(1);
   }

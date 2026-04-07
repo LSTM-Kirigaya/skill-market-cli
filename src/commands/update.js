@@ -28,6 +28,7 @@ async function update(skillId, options) {
     let description = options.description || existingSkill.purpose;
     let tags = options.tags ? options.tags.split(',').map(t => t.trim()) : existingSkill.tags;
     let usageExamples = existingSkill.usageExamples || [];
+    let model = options.model || existingSkill.model;
 
     // 如果提供了文件，读取新的 SKILL.md
     if (options.file) {
@@ -79,15 +80,43 @@ async function update(skillId, options) {
       return;
     }
 
-    // 执行更新
-    console.log(chalk.blue('\n📤 Updating...\n'));
+    // 执行更新（走后端 /skill/ai/update：全字段非空、tags 与 usageExamples 不可为空数组）
+    console.log(chalk.blue('\n正在更新…\n'));
+
+    const tagsFinal =
+      Array.isArray(tags) && tags.length > 0
+        ? tags.map((t) => String(t).trim()).filter(Boolean)
+        : ['general'];
+    const modelFinal =
+      model && String(model).trim() ? String(model).trim() : 'deepseek-chat';
+    const rootUrlFinal =
+      existingSkill.rootUrl && String(existingSkill.rootUrl).trim()
+        ? String(existingSkill.rootUrl).trim()
+        : 'https://example.com/SKILL.md';
+
+    if (!usageExamples || usageExamples.length === 0) {
+      console.error(
+        chalk.red(
+          '当前 Skill 没有用法示例（usageExamples），AI 渠道更新要求至少一条示例。请先在网页中补充后再试。'
+        )
+      );
+      process.exit(1);
+    }
+    const examplesOk = usageExamples.every(
+      (ex) => ex && String(ex.prompt || '').trim()
+    );
+    if (!examplesOk) {
+      console.error(chalk.red('存在空的用法示例 prompt，请修正后再试。'));
+      process.exit(1);
+    }
 
     const data = {
-      name,
-      purpose: description,
-      rootUrl: existingSkill.rootUrl,
-      tags,
-      usageExamples
+      name: String(name).trim(),
+      purpose: String(description).trim(),
+      rootUrl: rootUrlFinal,
+      tags: tagsFinal,
+      usageExamples,
+      model: modelFinal
     };
 
     const response = await apiClient.updateSkill(skillId, data);

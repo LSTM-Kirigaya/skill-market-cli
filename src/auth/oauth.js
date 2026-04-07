@@ -6,13 +6,11 @@ const { saveToken, getServerConfig } = require('./token-store');
 
 const CLIENT_ID = 'skill-market-cli';
 
-/** 与前端 devServer /api 代理一致，CLI 的 token、userinfo、config 均走 apiBase */
 function getApiRoot() {
   const serverConfig = getServerConfig();
   return serverConfig.apiBase || `${serverConfig.baseURL}/api`;
 }
 
-// 获取 OAuth 配置（基于当前 getServerConfig，由全局 --mode 在 preAction 中应用）
 async function getOAuthConfig() {
   const serverConfig = getServerConfig();
   const apiRoot = getApiRoot();
@@ -23,14 +21,13 @@ async function getOAuthConfig() {
       const data = response.data.data || {};
       return {
         ...data,
-        // 浏览器打开授权页用站点根 URL；换 token 等必须用 apiBase（如 localhost:8080/api），否则会 POST 到无代理的 /oauth/token 导致 404
         authorizeURL: `${serverConfig.baseURL}/oauth/authorize`,
         tokenURL: `${apiRoot}/oauth/token`,
         userinfoURL: `${apiRoot}/oauth/userinfo`
       };
     }
   } catch (e) {
-    // 使用默认配置
+    // 使用下方默认配置
   }
 
   return {
@@ -43,9 +40,6 @@ async function getOAuthConfig() {
   };
 }
 
-/**
- * 启动本地回调服务，返回实际端口与收到 code 的 Promise
- */
 function startCallbackServer() {
   let resolveCode;
   let rejectCode;
@@ -68,7 +62,7 @@ function startCallbackServer() {
       error = u.searchParams.get('error');
       error_description = u.searchParams.get('error_description');
     } catch {
-      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Bad request');
       return;
     }
@@ -81,17 +75,10 @@ function startCallbackServer() {
 
     if (error) {
       res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(`
-        <!DOCTYPE html>
-        <html>
-        <head><title>授权失败</title></head>
-        <body style="text-align:center;padding:50px;font-family:sans-serif;">
-          <h1 style="color:#f44336;">❌ 授权失败</h1>
-          <p>${error_description || error}</p>
-          <p>请关闭此窗口并返回命令行</p>
-        </body>
-        </html>
-      `);
+      res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>授权未通过</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:48px;">
+<h1>授权未通过</h1><p>${error_description || error}</p><p>请关闭此窗口，回到终端继续操作。</p>
+</body></html>`);
       server.close();
       rejectCode(new Error(error_description || error));
       return;
@@ -99,20 +86,10 @@ function startCallbackServer() {
 
     if (code) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(`
-        <!DOCTYPE html>
-        <html>
-        <head><title>授权成功</title></head>
-        <body style="text-align:center;padding:50px;font-family:sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);">
-          <div style="background:white;padding:40px;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.2);display:inline-block;">
-            <div style="font-size:64px;color:#4CAF50;">✓</div>
-            <h1 style="color:#333;">授权成功</h1>
-            <p style="color:#666;">您已成功授权 Skill Market CLI</p>
-            <p style="color:#999;font-size:14px;">请关闭此窗口并返回命令行</p>
-          </div>
-        </body>
-        </html>
-      `);
+      res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>授权完成</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:48px;">
+<h1>授权完成</h1><p>本窗口可关闭，请回到终端查看登录结果。</p>
+</body></html>`);
       server.close();
       resolveCode(code);
       return;
@@ -125,7 +102,7 @@ function startCallbackServer() {
   return new Promise((resolve, reject) => {
     server.listen(0, () => {
       const actualPort = server.address().port;
-      console.log(chalk.gray(`Callback server listening on port ${actualPort}`));
+      console.log(chalk.gray(`本地回调服务已启动，端口：${actualPort}`));
       resolve({ port: actualPort, codePromise });
     });
 
@@ -133,15 +110,26 @@ function startCallbackServer() {
   });
 }
 
-// 执行 OAuth 登录流程
+function formatApiError(err) {
+  const d = err.response && err.response.data;
+  if (!d) return err.message || String(err);
+  if (typeof d === 'string') return d;
+  if (d.error_description) return d.error_description;
+  if (d.error) return d.error;
+  try {
+    return JSON.stringify(d);
+  } catch {
+    return err.message;
+  }
+}
+
 async function login(options = {}) {
   const serverConfig = getServerConfig();
 
-  console.log(chalk.blue('🔐 Starting OAuth login flow...\n'));
-  console.log(chalk.gray(`Server base: ${serverConfig.baseURL}`));
+  console.log(chalk.bold('Skill Market 登录'));
+  console.log(chalk.gray(`站点地址：${serverConfig.baseURL}`));
 
   const oauthConfig = await getOAuthConfig();
-  console.log(chalk.gray(`Authorize: ${oauthConfig.authorizeURL || `${serverConfig.baseURL}/oauth/authorize`}`));
 
   const { port, codePromise } = await startCallbackServer();
   const redirectUri = `http://localhost:${port}/callback`;
@@ -159,36 +147,38 @@ async function login(options = {}) {
   authUrl.searchParams.set('scope', scopeStr);
   authUrl.searchParams.set('state', state);
 
-  console.log(chalk.cyan('\n📱 Please authorize the CLI in your browser.\n'));
-  console.log(chalk.gray('Authorization URL:'));
-  console.log(chalk.underline(authUrl.toString()));
-  console.log();
+  console.log('');
+  console.log('请在浏览器中完成授权（将自动打开页面；若未打开，请复制下方链接到浏览器）：');
+  console.log(chalk.cyan(authUrl.toString()));
+  console.log('');
 
   if (options.open !== false) {
     try {
       await open(authUrl.toString());
-      console.log(chalk.gray('Browser opened automatically.\n'));
+      console.log(chalk.gray('已尝试打开系统默认浏览器。'));
     } catch (e) {
-      console.log(chalk.yellow('Could not open browser automatically.'));
-      console.log(chalk.yellow('Please open the URL manually.\n'));
+      console.log(chalk.yellow('无法自动打开浏览器，请手动访问上方链接。'));
     }
   }
 
   try {
     const code = await codePromise;
-    console.log(chalk.green('✅ Authorization code received'));
+    console.log(chalk.gray('已收到授权码，正在换取访问令牌…'));
 
     const tokenURL = oauthConfig.tokenURL;
-    console.log(chalk.gray('Exchanging code for token...'));
-    console.log(chalk.gray(`POST ${tokenURL}`));
-
-    const tokenResponse = await axios.post(tokenURL, {
-      grant_type: 'authorization_code',
-      code: code,
-      redirect_uri: redirectUri,
-      client_id: oauthConfig.clientId,
-      client_secret: 'dummy-secret'
-    });
+    const tokenResponse = await axios.post(
+      tokenURL,
+      {
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: redirectUri,
+        client_id: oauthConfig.clientId,
+        client_secret: 'dummy-secret'
+      },
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
 
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
@@ -208,18 +198,20 @@ async function login(options = {}) {
       picture: user.picture
     });
 
-    console.log();
-    console.log(chalk.green('✅ Login successful!'));
-    console.log(chalk.cyan(`👤 Welcome, ${user.name}!`));
-    console.log();
+    console.log('');
+    console.log(chalk.green('登录成功'));
+    console.log(chalk.gray(`当前用户：${user.name || user.sub || '（未返回名称）'}`));
+    console.log('');
 
     return true;
   } catch (error) {
-    console.error();
-    console.error(chalk.red('❌ Login failed:'), error.message);
-    if (error.response) {
-      console.error(chalk.red('Server response:'), error.response.data);
+    console.log('');
+    console.log(chalk.red('登录失败'));
+    console.log(chalk.red(formatApiError(error)));
+    if (error.response && error.response.data && process.env.DEBUG) {
+      console.log(chalk.gray(JSON.stringify(error.response.data, null, 2)));
     }
+    console.log('');
     return false;
   }
 }
@@ -227,19 +219,25 @@ async function login(options = {}) {
 async function refreshAccessToken() {
   const { refreshToken } = require('./token-store').getToken();
   if (!refreshToken) {
-    throw new Error('No refresh token available');
+    throw new Error('无刷新令牌，请重新登录');
   }
 
   const oauthConfig = await getOAuthConfig();
   const tokenURL = oauthConfig.tokenURL;
 
   try {
-    const response = await axios.post(tokenURL, {
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: oauthConfig.clientId,
-      client_secret: 'dummy-secret'
-    });
+    const response = await axios.post(
+      tokenURL,
+      {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: oauthConfig.clientId,
+        client_secret: 'dummy-secret'
+      },
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
 
     const { access_token, refresh_token, expires_in } = response.data;
     const expiresAt = Date.now() + (expires_in * 1000);
@@ -249,7 +247,7 @@ async function refreshAccessToken() {
 
     return access_token;
   } catch (error) {
-    throw new Error('Failed to refresh token: ' + error.message);
+    throw new Error('刷新令牌失败：' + formatApiError(error));
   }
 }
 

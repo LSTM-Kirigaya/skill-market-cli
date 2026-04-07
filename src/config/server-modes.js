@@ -22,7 +22,7 @@ function normalizeMode(raw) {
 function applyServerMode(modeRaw) {
   const mode = normalizeMode(modeRaw);
   if (!mode) {
-    throw new Error(`Invalid --mode: "${modeRaw}". Use production or development.`);
+    throw new Error(`无效的 --mode：「${modeRaw}」。请使用 production 或 development。`);
   }
   setServerConfig(SERVER_MODES[mode]);
   const config = getConfig();

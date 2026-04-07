@@ -17,17 +17,16 @@ const program = new Command();
 
 program
   .name('skill-market-cli')
-  .description(`CLI tool for managing skills on Skill Market
+  .description(`Skill Market 命令行：管理技能与登录
 
-Network (global, applies to every command):
-  --mode <environment>   ${getServerModesHelp()}
-                         If omitted, uses the mode saved in ~/.skill-market-cli/config.json
-                         (after login), otherwise production.
+全局网络（对所有子命令生效）：
+  --mode <环境>   ${getServerModesHelp()}
+                 未指定时优先使用 ~/.skill-market-cli/config.json 中保存的环境（登录后写入），否则为 production。
 
-  Examples:
-    skill-market-cli --mode development login
-    skill-market-cli login --mode development
-    node bin/skill-market-cli.js list --mode development`)
+示例：
+  skill-market-cli --mode development login
+  skill-market-cli login --mode development
+  node bin/skill-market-cli.js list --mode development`)
   .version(pkg.version, '-v, --version')
   .option('-c, --config <path>', 'config file path')
   .option('--mode <environment>', getServerModesHelp());
@@ -51,21 +50,21 @@ program.hook('preAction', () => {
 program.hook('preAction', (thisCommand) => {
   const config = getConfig();
   if (config.user && thisCommand.args[0] !== 'login') {
-    console.log(chalk.gray(`Logged in as: ${config.user.name}`));
+    console.log(chalk.gray(`已登录：${config.user.name}`));
   }
 });
 
 // Login command
 program
   .command('login')
-  .description('Login to Skill Market (uses global --mode for OAuth server)')
-  .option('--no-open', 'Do not open browser automatically')
+  .description('浏览器 OAuth 登录（使用全局 --mode 指向的环境）')
+  .option('--no-open', '不自动打开浏览器，仅打印授权链接')
   .action(login);
 
 // Logout command
 program
   .command('logout')
-  .description('Logout from Skill Market')
+  .description('清除本地登录状态并尝试撤销服务端令牌')
   .action(logout);
 
 // List command
@@ -83,11 +82,12 @@ program
 program
   .command('upload <path>')
   .alias('up')
-  .description('Upload a new skill')
+  .description('上传 Skill（交互补全字段；用户案例 + 自动采集轨迹后提交 AI 渠道）')
   .option('-n, --name <name>', 'Skill name')
   .option('-d, --description <desc>', 'Skill description/purpose')
   .option('-t, --tags <tags>', 'Tags (comma separated)')
   .option('-m, --model <model>', 'Recommended model')
+  .option('-y, --yes', '非交互：跳过最终确认，适合脚本/CI')
   .action(upload);
 
 // Update command
@@ -129,7 +129,7 @@ program
     if (fs.existsSync(guidePath)) {
       console.log(fs.readFileSync(guidePath, 'utf-8'));
     } else {
-      console.log(chalk.yellow('Guide not found. Please visit https://kirigaya.cn/ktools/skillmanager'));
+      console.log(chalk.yellow('未找到本地指南，请访问：https://kirigaya.cn/ktools/skillmanager'));
     }
   });
 

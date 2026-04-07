@@ -105,12 +105,12 @@ class ApiClient {
   }
 
   async uploadSkill(data) {
-    const response = await this.client.post('/skill/upload', data);
+    const response = await this.client.post('/skill/ai/upload', data);
     return response.data;
   }
 
   async updateSkill(id, data) {
-    const response = await this.client.post(`/skill/update/${id}`, data);
+    const response = await this.client.post(`/skill/ai/update/${id}`, data);
     return response.data;
   }
 

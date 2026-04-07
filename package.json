@@ -1,6 +1,6 @@
 {
   "name": "skill-market-cli",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "CLI tool for managing skills on Skill Market",
   "main": "src/index.js",
   "bin": {
@@ -35,10 +35,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/skill-market-cli.git"
+    "url": "git+https://github.com/LSTM-Kirigaya/skill-market-cli.git"
   },
   "homepage": "https://kirigaya.cn/ktools/skillmanager",
   "bugs": {
-    "url": "https://github.com/yourusername/skill-market-cli/issues"
+    "url": "https://github.com/LSTM-Kirigaya/skill-market-cli/issues"
   }
 }

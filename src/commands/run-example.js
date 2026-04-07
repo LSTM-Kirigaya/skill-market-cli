@@ -3,6 +3,7 @@ const path = require('path');
 const chalk = require('chalk');
 const inquirer = require('inquirer');
 const YAML = require('yaml');
+const { runExampleAndCollect } = require('../lib/run-example-collect');
 
 /**
  * Run user examples and collect AI responses
@@ -211,62 +212,6 @@ async function addExampleInteractively(skillFilePath, skillContent, model) {
   if (addMore) {
     await addExampleInteractively(skillFilePath, skillContent, model);
   }
-}
-
-/**
- * 运行示例并收集 AI 响应
- * 这里需要集成 AI API，目前使用模拟数据
- */
-async function runExampleAndCollect(prompt, model) {
-  console.log(chalk.blue('\n🤖 Running example with AI...'));
-  console.log(chalk.gray(`Model: ${model}\n`));
-
-  // 这里应该调用实际的 AI API
-  // 目前模拟一个典型的 AI 响应流程
-  
-  console.log(chalk.gray('Simulating AI response collection...'));
-  console.log(chalk.gray('In production, this would call the AI API and capture:'));
-  console.log(chalk.gray('  1. Thinking steps'));
-  console.log(chalk.gray('  2. Tool calls'));
-  console.log(chalk.gray('  3. Final message\n'));
-
-  // 模拟 AI 响应
-  const simulatedResponses = [
-    {
-      type: 'thinking',
-      content: `Let me analyze this request: "${prompt}". The user wants me to help them with a specific task. I'll break this down into steps and execute the appropriate tools.`
-    },
-    {
-      type: 'toolcall',
-      toolName: 'read_file',
-      toolInput: { path: './README.md' }
-    },
-    {
-      type: 'toolcall',
-      toolName: 'write_file',
-      toolInput: { 
-        path: './output.txt', 
-        content: `Processed: ${prompt}` 
-      }
-    },
-    {
-      type: 'message',
-      content: `I've processed your request: "${prompt}". Here's what I did:\n\n1. Analyzed the requirements\n2. Read the relevant files\n3. Generated the output\n\nThe task is now complete!`
-    }
-  ];
-
-  // 模拟处理时间
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  console.log(chalk.gray('Collected responses:'));
-  simulatedResponses.forEach((resp, i) => {
-    const icon = resp.type === 'thinking' ? '💭' : 
-                 resp.type === 'toolcall' ? '🔧' : '💬';
-    console.log(chalk.gray(`  ${icon} [${resp.type}]`));
-  });
-  console.log();
-
-  return simulatedResponses;
 }
 
 module.exports = runExample;

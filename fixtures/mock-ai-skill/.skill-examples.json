@@ -1,0 +1,26 @@
+{
+  "model": "deepseek-chat",
+  "examples": [
+    {
+      "prompt": "请用一句话说明这个 mock skill 的用途。",
+      "aiResponses": [
+        {
+          "type": "thinking",
+          "content": "用户想了解 mock skill 用途，需用一句话概括。"
+        },
+        {
+          "type": "toolcall",
+          "toolName": "read_file",
+          "toolInput": {
+            "path": "./SKILL.md"
+          }
+        },
+        {
+          "type": "message",
+          "content": "这是一个用于测试 Skill Market CLI 上传流程的占位 Skill，不包含真实业务逻辑。"
+        }
+      ],
+      "model": "deepseek-chat"
+    }
+  ]
+}
