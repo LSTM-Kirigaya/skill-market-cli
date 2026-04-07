@@ -1,0 +1,26 @@
+{
+  "model": "deepseek-chat",
+  "examples": [
+    {
+      "prompt": "请根据我仓库里的 SKILL.md 帮我执行上传，并告诉我你要确认哪些字段。",
+      "aiResponses": [
+        {
+          "type": "thinking",
+          "content": "用户要用 skill-market-cli 上传 SKILL。需先读 frontmatter，核对 name、描述、tags、model、rootUrl；至少一条用户案例与 thinking/toolcall/message 轨迹；再执行 upload 交互或脚本。"
+        },
+        {
+          "type": "toolcall",
+          "toolName": "read_file",
+          "toolInput": {
+            "path": "./SKILL.md"
+          }
+        },
+        {
+          "type": "message",
+          "content": "我会先读取 `SKILL.md` 的 frontmatter，列出缺失项；请你确认一条「最终用户会如何提问」的测试案例。然后运行 `skill-market-cli upload <skill 目录>`，在交互中补全字段并自动采集轨迹后提交到 Skill Market。"
+        }
+      ],
+      "model": "deepseek-chat"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ tags:
   - cli
   - upload
 model: deepseek-chat
+rootUrl: https://raw.githubusercontent.com/LSTM-Kirigaya/skill-market-cli/refs/heads/main/src/skills/skill-market-upload/SKILL.md
 ---
 
 # Skill Market 上传助手（给 AI Agent 用）
