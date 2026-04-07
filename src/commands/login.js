@@ -10,7 +10,7 @@ async function login(options) {
     return;
   }
 
-  // 执行登录
+  // 执行登录（--mode 已在全局 preAction 中写入配置并设置 API 基址）
   const success = await oauthLogin(options);
   
   if (!success) {

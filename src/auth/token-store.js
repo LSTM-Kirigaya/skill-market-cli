@@ -70,7 +70,7 @@ function isLoggedIn() {
   return true;
 }
 
-// 获取服务器配置
+// 获取服务器配置（默认与 --mode production 一致）
 function getServerConfig() {
   const config = getConfig();
   return config.server || {

@@ -10,26 +10,55 @@ const update = require('./commands/update');
 const remove = require('./commands/delete');
 const runExample = require('./commands/run-example');
 const { getConfig } = require('./auth/token-store');
+const { applyServerMode, getServerModesHelp } = require('./config/server-modes');
+const apiClient = require('./api/client');
 
 const program = new Command();
 
 program
   .name('skill-market-cli')
-  .description('CLI tool for managing skills on Skill Market')
+  .description(`CLI tool for managing skills on Skill Market
+
+Network (global, applies to every command):
+  --mode <environment>   ${getServerModesHelp()}
+                         If omitted, uses the mode saved in ~/.skill-market-cli/config.json
+                         (after login), otherwise production.
+
+  Examples:
+    skill-market-cli --mode development login
+    skill-market-cli login --mode development
+    node bin/skill-market-cli.js list --mode development`)
   .version(pkg.version, '-v, --version')
   .option('-c, --config <path>', 'config file path')
-  .hook('preAction', (thisCommand) => {
-    // 显示欢迎信息
-    const config = getConfig();
-    if (config.user && thisCommand.args[0] !== 'login') {
-      console.log(chalk.gray(`Logged in as: ${config.user.name}`));
-    }
-  });
+  .option('--mode <environment>', getServerModesHelp());
+
+program.hook('preAction', () => {
+  const opts = program.opts();
+  const config = getConfig();
+  const effectiveMode =
+    opts.mode !== undefined && opts.mode !== null && opts.mode !== ''
+      ? opts.mode
+      : (config.mode || 'production');
+  try {
+    applyServerMode(effectiveMode);
+    apiClient.reinit();
+  } catch (e) {
+    console.error(chalk.red(e.message));
+    process.exit(1);
+  }
+});
+
+program.hook('preAction', (thisCommand) => {
+  const config = getConfig();
+  if (config.user && thisCommand.args[0] !== 'login') {
+    console.log(chalk.gray(`Logged in as: ${config.user.name}`));
+  }
+});
 
 // Login command
 program
   .command('login')
-  .description('Login to Skill Market')
+  .description('Login to Skill Market (uses global --mode for OAuth server)')
   .option('--no-open', 'Do not open browser automatically')
   .action(login);
 

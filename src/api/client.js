@@ -9,6 +9,10 @@ class ApiClient {
     this.init();
   }
 
+  reinit() {
+    this.init();
+  }
+
   init() {
     const serverConfig = getServerConfig();
     this.client = axios.create({
