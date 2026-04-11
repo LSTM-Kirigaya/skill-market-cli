@@ -9,7 +9,7 @@ function parseSkillMarkdown(content) {
   let frontmatter = null;
   let examples = [];
 
-  const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
+  const frontmatterMatch = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/);
   if (frontmatterMatch) {
     try {
       frontmatter = YAML.parse(frontmatterMatch[1]);
@@ -18,12 +18,12 @@ function parseSkillMarkdown(content) {
     }
   }
 
-  const examplesMatch = content.match(/## Usage Examples?\s*\n([\s\S]*?)(?=##|$)/i);
+  const examplesMatch = content.match(/## Usage Examples?\s*\r?\n([\s\S]*?)(?=##|$)/i);
   if (examplesMatch) {
     const exampleText = examplesMatch[1];
-    const exampleBlocks = exampleText.split(/\n\n+/).filter((b) => b.trim());
+    const exampleBlocks = exampleText.split(/\r?\n\r?\n+/).filter((b) => b.trim());
     examples = exampleBlocks.map((block) => {
-      const lines = block.split('\n').filter((l) => l.trim());
+      const lines = block.split(/\r?\n/).filter((l) => l.trim());
       return { prompt: lines.join('\n') };
     });
   }

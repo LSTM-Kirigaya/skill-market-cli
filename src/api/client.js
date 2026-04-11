@@ -26,9 +26,10 @@ class ApiClient {
     // 请求拦截器 - 添加 Token（优先 OAuth Token，其次 Personal Access Token）
     this.client.interceptors.request.use(
       async (config) => {
-        if (isLoggedIn()) {
-          const { accessToken, expiresAt } = getToken();
+        const { accessToken, expiresAt } = getToken();
+        const pat = getPersonalAccessToken();
 
+        if (accessToken) {
           // 检查 Token 是否即将过期
           if (expiresAt && Date.now() > expiresAt - 60000) {
             // Token 即将过期，尝试刷新
@@ -36,17 +37,18 @@ class ApiClient {
               const newToken = await refreshAccessToken();
               config.headers['Authorization'] = `Bearer ${newToken}`;
             } catch (e) {
-              // 刷新失败，使用现有 Token
-              config.headers['Authorization'] = `Bearer ${accessToken}`;
+              // 刷新失败，回退到 PAT（如果有）或现有 Token
+              if (pat) {
+                config.headers['Authorization'] = `Bearer ${pat}`;
+              } else {
+                config.headers['Authorization'] = `Bearer ${accessToken}`;
+              }
             }
           } else {
             config.headers['Authorization'] = `Bearer ${accessToken}`;
           }
-        } else {
-          const pat = getPersonalAccessToken();
-          if (pat) {
-            config.headers['Authorization'] = `Bearer ${pat}`;
-          }
+        } else if (pat) {
+          config.headers['Authorization'] = `Bearer ${pat}`;
         }
         return config;
       },
