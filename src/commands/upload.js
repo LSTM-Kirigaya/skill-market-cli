@@ -52,7 +52,7 @@ async function upload(skillPath, options = {}) {
     ? options.tags.split(',').map((t) => t.trim())
     : frontmatter?.tags || [];
   let model = options.model || frontmatter?.model;
-  let rootUrl = frontmatter?.rootUrl;
+  let rootUrl = options.rootUrl || frontmatter?.rootUrl;
 
   const fromJson = loadDotSkillExamples(skillDir);
   let usageExamples = fromJson;
@@ -70,6 +70,27 @@ async function upload(skillPath, options = {}) {
 
   const needName = !name || !String(name).trim();
   const needDesc = !description || !String(description).trim();
+  const needModel = !model || !String(model).trim();
+  const needTags = !tags || tags.length === 0;
+  const needRootUrl = !rootUrl || !String(rootUrl).trim();
+
+  const missingFields = [];
+  if (needName) missingFields.push('name (SKILL 名称)');
+  if (needDesc) missingFields.push('description (描述)');
+  if (needModel) missingFields.push('model (推荐模型)');
+  if (needTags) missingFields.push('tags (标签)');
+  if (needRootUrl) missingFields.push('rootUrl (资源直链)');
+
+  if (missingFields.length > 0 && options.yes) {
+    console.error(chalk.red('❌ 非交互模式 (--yes) 缺少以下必填字段：'));
+    for (const f of missingFields) {
+      console.error(chalk.gray(`   - ${f}`));
+    }
+    console.error(chalk.gray('\n提示：可通过命令行参数或 SKILL.md frontmatter 提供：'));
+    console.error(chalk.gray('  --name, --description, --model, --tags, --root-url'));
+    process.exit(1);
+  }
+
   if (needName || needDesc) {
     const answers = await inquirer.prompt(
       [
@@ -136,6 +157,13 @@ async function upload(skillPath, options = {}) {
       }
     ]);
     rootUrl = ru || `file://${path.resolve(skillFilePath)}`;
+  }
+
+  // 校验 rootUrl 协议：服务器仅接受 http(s)
+  if (rootUrl.startsWith('file://')) {
+    console.error(chalk.red('❌ rootUrl 不能使用 file:// 协议。'));
+    console.error(chalk.gray('请提供一个公开可访问的 https 直链（如 GitHub raw URL）。'));
+    process.exit(1);
   }
 
   console.log(chalk.gray('\n--- 上传摘要 ---'));

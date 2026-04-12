@@ -94,6 +94,7 @@ program
   .option('-d, --description <desc>', 'Skill description/purpose')
   .option('-t, --tags <tags>', 'Tags (comma separated)')
   .option('-m, --model <model>', 'Recommended model')
+  .option('-r, --root-url <url>', 'SKILL root resource URL (must be publicly accessible https)')
   .option('-y, --yes', '非交互：跳过最终确认，适合脚本/CI')
   .action(upload);
 
