@@ -66,9 +66,17 @@ async function upload(skillPath, options = {}) {
     }
   }
 
+  const nonInteractive = options.nonInteractive === true;
+
   const needName = !name || !String(name).trim();
   const needDesc = !description || !String(description).trim();
   if (needName || needDesc) {
+    if (nonInteractive) {
+      const missing = [needName && 'name（-n）', needDesc && 'description（-d）'].filter(Boolean).join('、');
+      console.error(chalk.red(`非交互模式缺少必填字段：${missing}`));
+      console.error(chalk.yellow('请通过 CLI 参数提供，或在 SKILL.md frontmatter 中填写。'));
+      process.exit(1);
+    }
     const answers = await inquirer.prompt(
       [
         needName && {
@@ -91,15 +99,19 @@ async function upload(skillPath, options = {}) {
 
   // 模型默认值（用于采集与提交）
   if (!model || !String(model).trim()) {
-    const { m } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'm',
-        message: '推荐模型（用于案例采集与提交，建议与线上一致）：',
-        default: 'deepseek-chat'
-      }
-    ]);
-    model = m || 'deepseek-chat';
+    if (nonInteractive) {
+      model = 'deepseek-chat';
+    } else {
+      const { m } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'm',
+          message: '推荐模型（用于案例采集与提交，建议与线上一致）：',
+          default: 'deepseek-chat'
+        }
+      ]);
+      model = m || 'deepseek-chat';
+    }
   }
 
   const modelFinal = String(model).trim();
@@ -107,33 +119,42 @@ async function upload(skillPath, options = {}) {
   // 必须有至少一条「用户案例」且含轨迹：若无则交互式收集
   usageExamples = await ensureUsageExamplesWithTrace({
     initial: usageExamples,
-    model: modelFinal
+    model: modelFinal,
+    nonInteractive
   });
 
   if (!tags || tags.length === 0) {
-    const { tagStr } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'tagStr',
-        message: '标签（逗号分隔，至少一个）：',
-        default: 'general',
-        validate: (input) =>
-          input && String(input).trim() ? true : '至少填写一个标签'
-      }
-    ]);
-    tags = tagStr.split(',').map((t) => t.trim()).filter(Boolean);
+    if (nonInteractive) {
+      tags = ['general'];
+    } else {
+      const { tagStr } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'tagStr',
+          message: '标签（逗号分隔，至少一个）：',
+          default: 'general',
+          validate: (input) =>
+            input && String(input).trim() ? true : '至少填写一个标签'
+        }
+      ]);
+      tags = tagStr.split(',').map((t) => t.trim()).filter(Boolean);
+    }
   }
 
   if (!rootUrl || !String(rootUrl).trim()) {
-    const { ru } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'ru',
-        message: 'SKILL 根资源 URL（可填 GitHub raw 或本地文件）：',
-        default: `file://${path.resolve(skillFilePath)}`
-      }
-    ]);
-    rootUrl = ru || `file://${path.resolve(skillFilePath)}`;
+    if (nonInteractive) {
+      rootUrl = `file://${path.resolve(skillFilePath)}`;
+    } else {
+      const { ru } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'ru',
+          message: 'SKILL 根资源 URL（可填 GitHub raw 或本地文件）：',
+          default: `file://${path.resolve(skillFilePath)}`
+        }
+      ]);
+      rootUrl = ru || `file://${path.resolve(skillFilePath)}`;
+    }
   }
 
   console.log(chalk.gray('\n--- 上传摘要 ---'));
@@ -145,7 +166,7 @@ async function upload(skillPath, options = {}) {
   console.log(`案例条数：${usageExamples.length}（每条含 prompt + 轨迹）`);
   console.log('');
 
-  let confirm = options.yes === true;
+  let confirm = options.yes === true || nonInteractive;
   if (!confirm) {
     const ans = await inquirer.prompt([
       {
@@ -208,6 +229,10 @@ async function upload(skillPath, options = {}) {
     }
   } catch (error) {
     console.error(chalk.red('上传出错：'), error.message);
+    if (error.response) {
+      console.error(chalk.red('状态码：'), error.response.status);
+      console.error(chalk.red('响应数据：'), JSON.stringify(error.response.data, null, 2));
+    }
     process.exit(1);
   }
 }
@@ -215,7 +240,7 @@ async function upload(skillPath, options = {}) {
 /**
  * 保证至少一条案例；若仅有 prompt 无轨迹，则询问是否运行采集
  */
-async function ensureUsageExamplesWithTrace({ initial, model }) {
+async function ensureUsageExamplesWithTrace({ initial, model, nonInteractive = false }) {
   let list = Array.isArray(initial) ? [...initial] : [];
 
   const hasTrace = (ex) =>
@@ -237,7 +262,11 @@ async function ensureUsageExamplesWithTrace({ initial, model }) {
   }
 
   if (valid.length > 0 && !allHaveTrace) {
-    console.log(chalk.gray('检测到 SKILL.md 中已有案例文本，但缺少轨迹。将逐条运行采集。\n'));
+    if (nonInteractive) {
+      console.log(chalk.gray('非交互模式：自动采集缺失的轨迹…'));
+    } else {
+      console.log(chalk.gray('检测到 SKILL.md 中已有案例文本，但缺少轨迹。将逐条运行采集。\n'));
+    }
     const out = [];
     for (const ex of valid) {
       const trace = await runExampleAndCollect(ex.prompt, model);
@@ -248,6 +277,12 @@ async function ensureUsageExamplesWithTrace({ initial, model }) {
       });
     }
     return out;
+  }
+
+  if (nonInteractive) {
+    console.error(chalk.red('非交互模式缺少用户案例及轨迹。'));
+    console.error(chalk.yellow('请预先创建 .skill-examples.json，或提供带有 usageExamples 的 SKILL.md。'));
+    process.exit(1);
   }
 
   console.log(

@@ -94,7 +94,8 @@ program
   .option('-d, --description <desc>', 'Skill description/purpose')
   .option('-t, --tags <tags>', 'Tags (comma separated)')
   .option('-m, --model <model>', 'Recommended model')
-  .option('-y, --yes', '非交互：跳过最终确认，适合脚本/CI')
+  .option('-y, --yes', '跳过最终确认')
+  .option('--non-interactive', '完全非交互模式：自动填充默认值，必填缺失时报错退出（适合脚本/CI）')
   .action(upload);
 
 // Update command
