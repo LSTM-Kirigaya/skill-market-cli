@@ -107,6 +107,8 @@ program
   .option('-n, --name <name>', 'Skill name')
   .option('-d, --description <desc>', 'Skill description')
   .option('-t, --tags <tags>', 'Tags (comma separated)')
+  .option('-y, --yes', '跳过确认')
+  .option('--non-interactive', '完全非交互模式（适合脚本/CI）')
   .action(update);
 
 // Delete command
