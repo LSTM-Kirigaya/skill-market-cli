@@ -5,6 +5,7 @@ const inquirer = require('inquirer');
 const YAML = require('yaml');
 const { isLoggedIn, getPersonalAccessToken, printLoginHelp } = require('../auth/token-store');
 const apiClient = require('../api/client');
+const { getRecommendedModel } = require('../lib/detect-environment');
 
 async function update(skillId, options) {
   if (!isLoggedIn() && !getPersonalAccessToken()) {
@@ -89,8 +90,9 @@ async function update(skillId, options) {
       Array.isArray(tags) && tags.length > 0
         ? tags.map((t) => String(t).trim()).filter(Boolean)
         : ['general'];
+    const defaultModel = getRecommendedModel();
     const modelFinal =
-      model && String(model).trim() ? String(model).trim() : 'deepseek-chat';
+      model && String(model).trim() ? String(model).trim() : defaultModel;
     const rootUrlFinal =
       existingSkill.rootUrl && String(existingSkill.rootUrl).trim()
         ? String(existingSkill.rootUrl).trim()

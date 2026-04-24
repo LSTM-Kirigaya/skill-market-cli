@@ -5,6 +5,7 @@ const inquirer = require('inquirer');
 const { isLoggedIn, getPersonalAccessToken, printLoginHelp } = require('../auth/token-store');
 const apiClient = require('../api/client');
 const { runExampleAndCollect } = require('../lib/run-example-collect');
+const { getRecommendedModel, getDetectedEnv, FALLBACK_MODEL } = require('../lib/detect-environment');
 const {
   parseSkillMarkdown,
   loadDotSkillExamples,
@@ -98,19 +99,55 @@ async function upload(skillPath, options = {}) {
   }
 
   // 模型默认值（用于采集与提交）
+  const envInfo = getDetectedEnv();
+  const hardcodedDefault = FALLBACK_MODEL;
+
   if (!model || !String(model).trim()) {
     if (nonInteractive) {
-      model = 'deepseek-chat';
+      model = envInfo.env ? envInfo.model : hardcodedDefault;
     } else {
-      const { m } = await inquirer.prompt([
+      const choices = [];
+
+      if (envInfo.env) {
+        choices.push({
+          name: `使用识别模型: ${envInfo.model} (${envInfo.displayName})`,
+          value: envInfo.model
+        });
+      }
+
+      choices.push({
+        name: `使用默认模型: ${hardcodedDefault}`,
+        value: hardcodedDefault
+      });
+
+      choices.push({
+        name: '其他（手动输入）',
+        value: 'custom'
+      });
+
+      const { selectedModel } = await inquirer.prompt([
         {
-          type: 'input',
-          name: 'm',
-          message: '推荐模型（用于案例采集与提交，建议与线上一致）：',
-          default: 'deepseek-chat'
+          type: 'list',
+          name: 'selectedModel',
+          message: '选择推荐模型（用于案例采集与提交，建议与线上一致）：',
+          choices,
+          default: envInfo.env ? envInfo.model : hardcodedDefault
         }
       ]);
-      model = m || 'deepseek-chat';
+
+      if (selectedModel === 'custom') {
+        const { customModel } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'customModel',
+            message: '请输入模型名称：',
+            default: envInfo.env ? envInfo.model : hardcodedDefault
+          }
+        ]);
+        model = customModel || hardcodedDefault;
+      } else {
+        model = selectedModel;
+      }
     }
   }
 
