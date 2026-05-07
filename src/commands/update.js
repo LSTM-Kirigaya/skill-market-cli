@@ -88,7 +88,7 @@ async function update(skillId, options) {
         ? tags.map((t) => String(t).trim()).filter(Boolean)
         : ['general'];
     const modelFinal =
-      model && String(model).trim() ? String(model).trim() : 'deepseek-chat';
+      model && String(model).trim() ? String(model).trim() : '';
     const rootUrlFinal =
       existingSkill.rootUrl && String(existingSkill.rootUrl).trim()
         ? String(existingSkill.rootUrl).trim()

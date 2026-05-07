@@ -1,0 +1,63 @@
+{
+  "model": "claude-sonnet-4-6",
+  "examples": [
+    {
+      "prompt": "帮我实现一个发送邮箱验证码的接口，使用腾讯云 SES SMTP 方式。需要配置 SMTP 环境变量，设计验证码发送接口，包含参数校验、频率控制、Redis 存储和 SMTP 发送。",
+      "aiResponses": [
+        {
+          "type": "thinking",
+          "content": "分析用户请求：「帮我实现一个发送邮箱验证码的接口，使用腾讯云 SES SMTP 方式。需要配置 SMTP 环境变量，设计验证码发送接口，包含参数校验、频率控制、Redis 存储和 SMTP 发送。」。将拆解步骤并调用合适工具完成目标。"
+        },
+        {
+          "type": "toolcall",
+          "toolName": "read_file",
+          "toolInput": {
+            "path": "./README.md"
+          }
+        },
+        {
+          "type": "toolcall",
+          "toolName": "write_file",
+          "toolInput": {
+            "path": "./output.txt",
+            "content": "已处理：帮我实现一个发送邮箱验证码的接口，使用腾讯云 SES SMTP 方式。需要配置 SMTP 环境变量，设计验证码发送接口，包含参数校验、频率控制、Redis 存储和 SMTP 发送。"
+          }
+        },
+        {
+          "type": "message",
+          "content": "已根据你的请求完成处理：「帮我实现一个发送邮箱验证码的接口，使用腾讯云 SES SMTP 方式。需要配置 SMTP 环境变量，设计验证码发送接口，包含参数校验、频率控制、Redis 存储和 SMTP 发送。」。\n\n步骤摘要：\n1. 理解需求\n2. 读取上下文\n3. 生成结果\n\n以上为演示轨迹，上传时将一并提交。"
+        }
+      ],
+      "model": "claude-sonnet-4-6"
+    },
+    {
+      "prompt": "使用 claude-sonnet-4-6 模型生成包含完整错误处理和日志的 Go 代码。",
+      "aiResponses": [
+        {
+          "type": "thinking",
+          "content": "分析用户请求：「使用 claude-sonnet-4-6 模型生成包含完整错误处理和日志的 Go 代码。」。将拆解步骤并调用合适工具完成目标。"
+        },
+        {
+          "type": "toolcall",
+          "toolName": "read_file",
+          "toolInput": {
+            "path": "./README.md"
+          }
+        },
+        {
+          "type": "toolcall",
+          "toolName": "write_file",
+          "toolInput": {
+            "path": "./output.txt",
+            "content": "已处理：使用 claude-sonnet-4-6 模型生成包含完整错误处理和日志的 Go 代码。"
+          }
+        },
+        {
+          "type": "message",
+          "content": "已根据你的请求完成处理：「使用 claude-sonnet-4-6 模型生成包含完整错误处理和日志的 Go 代码。」。\n\n步骤摘要：\n1. 理解需求\n2. 读取上下文\n3. 生成结果\n\n以上为演示轨迹，上传时将一并提交。"
+        }
+      ],
+      "model": "claude-sonnet-4-6"
+    }
+  ]
+}

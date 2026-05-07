@@ -1,6 +1,6 @@
 {
   "name": "skill-market-cli",
-  "version": "1.1.3",
+  "version": "1.2.0",
   "description": "CLI tool for managing skills on Skill Market",
   "main": "src/index.js",
   "bin": {

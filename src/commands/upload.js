@@ -12,6 +12,84 @@ const {
 } = require('../lib/skill-upload-helpers');
 
 /**
+ * normalizeTagsForUpload 规范化用户/AI 提交的原始标签：
+ * 1. 拆分连字符复合标签（如 "email-ses-smtp" → ["SES", "SMTP"]），滤除过于泛化的片段
+ * 2. 拆分中文复合标签（按常见分隔符）
+ * 3. 去重 + 去空
+ *
+ * 约束原则（抽象级别，不绑定具体案例）：
+ * - 原子性：每个 tag 只表示一个明确的技术/平台/概念，不组合多个语义单元
+ * - 抽象层级：优先使用技术名词本身而非其应用场景；能用协议/标准名就不用产品名
+ * - 避免泛化词：过于宽泛的片段（如 "email", "service", "kit", "tool"）不作为独立 tag，
+ *   除非它本身就是该 Skill 的核心主题且无更具体的替代词
+ */
+function normalizeTagsForUpload(tags) {
+  // 过于泛化的词（与具体技术无关或涵盖面过广），复合 tag 拆分后自动滤除
+  const genericWords = new Set([
+    'email', 'service', 'kit', 'tool', 'api', 'app', 'lib', 'utils',
+    'helper', 'core', 'base', 'common', 'demo', 'example', 'test',
+    'simple', 'basic', 'advanced', 'pro', 'lite', 'plus'
+  ]);
+
+  const result = [];
+  for (const raw of tags) {
+    const trimmed = String(raw).trim();
+    if (!trimmed) continue;
+
+    // 1. 拆分连字符复合词
+    if (trimmed.includes('-') && !trimmed.startsWith('file-') && !trimmed.startsWith('os-')) {
+      const parts = trimmed.split('-').map(p => p.trim()).filter(Boolean);
+      const meaningful = parts.filter(p => !genericWords.has(p.toLowerCase()));
+      if (meaningful.length > 0) {
+        for (const p of meaningful) result.push(p);
+        continue;
+      }
+    }
+
+    // 2. 拆分中文复合词（含空格）
+    if (/[一-鿿]/.test(trimmed) && /\s/.test(trimmed)) {
+      const parts = trimmed.split(/\s+/).filter(Boolean);
+      for (const p of parts) result.push(p);
+      continue;
+    }
+
+    // 3. 尝试检测中文连写复合词（无空格、多概念粘连）
+    // 常见技术后缀可作为拆分边界：云、服务、平台、协议、框架、工具、系统
+    const cnSplitHints = ['云', '服务', '平台', '协议', '框架', '工具', '系统', '邮件', '推送', '验证'];
+    let didSplit = false;
+    for (const hint of cnSplitHints) {
+      const idx = trimmed.indexOf(hint);
+      if (idx > 0 && idx + hint.length < trimmed.length) {
+        // hint 在中间，拆分
+        const before = trimmed.substring(0, idx + hint.length);
+        const after = trimmed.substring(idx + hint.length);
+        result.push(before, after);
+        didSplit = true;
+        break;
+      }
+    }
+    if (didSplit) continue;
+
+    result.push(trimmed);
+  }
+
+  // 常见缩写/协议名规范化：纯字母 2-4 字符全大写
+  const normalized = result.map(t => {
+    if (/^[a-zA-Z]{2,4}$/.test(t)) return t.toUpperCase();
+    return t;
+  });
+
+  // 去重（大小写不敏感）
+  const seen = new Set();
+  return normalized.filter(t => {
+    const key = t.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
  * 交互补全：名称、描述、标签、模型、rootUrl、用户案例 + 可选运行采集轨迹
  */
 async function upload(skillPath, options = {}) {
@@ -95,11 +173,15 @@ async function upload(skillPath, options = {}) {
       {
         type: 'input',
         name: 'm',
-        message: '推荐模型（用于案例采集与提交，建议与线上一致）：',
-        default: 'deepseek-chat'
+        message: '推荐模型（必填，如 claude-sonnet-4-6 / gpt-4o / deepseek-chat，请填写实际使用的模型）：',
+        validate: (input) => (input && String(input).trim() ? true : '模型名不能为空，请填写你当前使用的模型名称')
       }
     ]);
-    model = m || 'deepseek-chat';
+    model = String(m || '').trim();
+    if (!model) {
+      console.error(chalk.red('模型名不能为空，上传已取消。'));
+      process.exit(1);
+    }
   }
 
   const modelFinal = String(model).trim();
@@ -186,12 +268,189 @@ async function upload(skillPath, options = {}) {
   try {
     console.log(chalk.gray('\n正在上传…\n'));
 
-    const tagsFinal = tags.map((t) => String(t).trim()).filter(Boolean);
+    const tagsRaw = tags.map((t) => String(t).trim()).filter(Boolean);
+    const tagsFinal = normalizeTagsForUpload(tagsRaw);
+
+    if (tagsFinal.length !== tagsRaw.length) {
+      console.log(chalk.yellow(`标签规范化：${tagsRaw.length} → ${tagsFinal.length}（拆分复合词/去重）`));
+      console.log(chalk.gray(`  原始: [${tagsRaw.join(', ')}]`));
+      console.log(chalk.gray(`  规范: [${tagsFinal.join(', ')}]`));
+    }
+
+    // Resolve tags against SkillTag vocabulary (batch)
+    console.log(chalk.gray('\nResolving tags...'));
+    const resolvedTags = [];
+    try {
+      const resolveResult = await apiClient.resolveSkillTags(tagsFinal);
+      if (resolveResult.code === 200 && resolveResult.data) {
+        const unmatchedTags = [];
+
+        for (const [rawTag, result] of Object.entries(resolveResult.data)) {
+          if (result.status === 'matched' && result.tag) {
+            resolvedTags.push(result.tag.nameEn);
+            console.log(chalk.gray(`  ${rawTag} -> ${result.tag.nameZh} (${result.tag.nameEn})`));
+          } else {
+            // unmatched: collect for later decision
+            const suggestions = result.suggestions || [];
+            unmatchedTags.push({ rawTag, suggestions });
+          }
+        }
+
+        // Handle unmatched tags interactively
+        if (unmatchedTags.length > 0) {
+          console.log(chalk.yellow(`\n以下 ${unmatchedTags.length} 个标签在数据库中未找到：`));
+          for (const { rawTag, suggestions } of unmatchedTags) {
+            console.log(chalk.yellow(`\n  ✗ "${rawTag}" 不存在`));
+            if (suggestions.length > 0) {
+              console.log(chalk.gray(`    数据库中可能相关的标签：`));
+              for (const s of suggestions) {
+                console.log(chalk.gray(`      - ${s.nameZh} (${s.nameEn}) [id=${s.id}]`));
+              }
+            } else {
+              console.log(chalk.gray(`    未找到相似标签`));
+            }
+          }
+
+          // Let user/AI decide for each unmatched tag
+          for (const { rawTag, suggestions } of unmatchedTags) {
+            const choices = [
+              { name: `创建新标签 "${rawTag}"`, value: 'create' },
+              ...suggestions.map(s => ({
+                name: `复用 "${s.nameZh}" (${s.nameEn})`,
+                value: s.nameEn
+              })),
+              { name: '跳过此标签', value: 'skip' }
+            ];
+
+            // In non-interactive mode, auto-create if no suggestions, otherwise ask
+            if (options.yes) {
+              // Auto mode: 仅在建议足够匹配时才复用，否则创建新 tag
+              // 匹配条件：建议的 nameEn 与原始 tag 完全相同（大小写不敏感），
+              // 或原始 tag 作为独立单词出现在建议中（如 "AI" 匹配 "AI Agent"）
+              const strongMatch = suggestions.find(s => {
+                const sLower = s.nameEn.toLowerCase();
+                const tLower = rawTag.toLowerCase();
+                if (sLower === tLower) return true;
+                // 原始 tag 作为独立单词出现在建议中，且建议不超过 2 个单词
+                // （避免 "SES" 匹配到 "email-ses-smtp" 这类长复合词）
+                const parts = sLower.split(/[-_\s]+/);
+                if (parts.length <= 2 && parts.includes(tLower)) return true;
+                return false;
+              });
+              if (strongMatch) {
+                resolvedTags.push(strongMatch.nameEn);
+                console.log(chalk.gray(`  [auto] ${rawTag} -> ${strongMatch.nameEn} (匹配: ${strongMatch.nameZh})`));
+              } else if (suggestions.length > 0) {
+                // 有建议但不够强 → 仍然创建新 tag（更保守，避免错误合并）
+                const nameEn = rawTag.replace(/\s+/g, '-').toLowerCase();
+                try {
+                  const createResult = await apiClient.createSkillTag(rawTag, nameEn);
+                  if (createResult.code === 200 && createResult.data) {
+                    resolvedTags.push(createResult.data.nameEn);
+                    console.log(chalk.green(`  [auto] 已创建标签: ${rawTag} (${createResult.data.nameEn})`));
+                  } else {
+                    resolvedTags.push(rawTag);
+                  }
+                } catch {
+                  resolvedTags.push(rawTag);
+                }
+              } else {
+                const nameEn = rawTag.replace(/\s+/g, '-').toLowerCase();
+                try {
+                  const createResult = await apiClient.createSkillTag(rawTag, nameEn);
+                  if (createResult.code === 200 && createResult.data) {
+                    resolvedTags.push(createResult.data.nameEn);
+                    console.log(chalk.green(`  [auto] 已创建标签: ${rawTag} (${createResult.data.nameEn})`));
+                  } else {
+                    console.log(chalk.yellow(`  [auto] 跳过: ${rawTag}`));
+                  }
+                } catch {
+                  console.log(chalk.yellow(`  [auto] 创建失败，跳过: ${rawTag}`));
+                }
+              }
+              continue;
+            }
+
+            const { action } = await inquirer.prompt([
+              {
+                type: 'list',
+                name: 'action',
+                message: `如何处理标签 "${rawTag}"？`,
+                choices
+              }
+            ]);
+
+            if (action === 'create') {
+              const nameEn = rawTag.replace(/\s+/g, '-').toLowerCase();
+              try {
+                const createResult = await apiClient.createSkillTag(rawTag, nameEn);
+                if (createResult.code === 200 && createResult.data) {
+                  resolvedTags.push(createResult.data.nameEn);
+                  console.log(chalk.green(`  已创建: ${rawTag} -> ${createResult.data.nameEn}`));
+                } else {
+                  console.log(chalk.yellow(`  创建失败，跳过: ${rawTag}`));
+                }
+              } catch (createErr) {
+                // Retry search (another process may have created it concurrently)
+                try {
+                  const retryResult = await apiClient.searchSkillTags(rawTag);
+                  if (retryResult.code === 200 && Array.isArray(retryResult.data) && retryResult.data.length > 0) {
+                    resolvedTags.push(retryResult.data[0].nameEn);
+                    console.log(chalk.gray(`  已存在（重试命中）: ${rawTag} -> ${retryResult.data[0].nameEn}`));
+                  } else {
+                    console.log(chalk.yellow(`  创建失败，跳过: ${rawTag}`));
+                  }
+                } catch {
+                  console.log(chalk.yellow(`  创建失败，跳过: ${rawTag}`));
+                }
+              }
+            } else if (action === 'skip') {
+              console.log(chalk.gray(`  已跳过: ${rawTag}`));
+            } else {
+              // Reuse existing tag
+              resolvedTags.push(action);
+              console.log(chalk.gray(`  复用: ${rawTag} -> ${action}`));
+            }
+          }
+        }
+      } else {
+        // Fallback to original behavior
+        console.log(chalk.yellow('批量解析失败，回退到逐个解析...'));
+        for (const tag of tagsFinal) {
+          try {
+            const searchResult = await apiClient.searchSkillTags(tag);
+            if (searchResult.code === 200 && Array.isArray(searchResult.data) && searchResult.data.length > 0) {
+              resolvedTags.push(searchResult.data[0].nameEn);
+            } else {
+              resolvedTags.push(tag);
+            }
+          } catch {
+            resolvedTags.push(tag);
+          }
+        }
+      }
+    } catch (err) {
+      // Fallback: network error or endpoint not available
+      console.log(chalk.yellow('批量解析接口不可用，回退到逐个解析...'));
+      for (const tag of tagsFinal) {
+        try {
+          const searchResult = await apiClient.searchSkillTags(tag);
+          if (searchResult.code === 200 && Array.isArray(searchResult.data) && searchResult.data.length > 0) {
+            resolvedTags.push(searchResult.data[0].nameEn);
+          } else {
+            resolvedTags.push(tag);
+          }
+        } catch {
+          resolvedTags.push(tag);
+        }
+      }
+    }
+
     const data = {
       name: String(name).trim(),
       purpose: String(description).trim(),
       rootUrl: String(rootUrl).trim(),
-      tags: tagsFinal,
+      tags: resolvedTags,
       usageExamples,
       model: modelFinal
     };

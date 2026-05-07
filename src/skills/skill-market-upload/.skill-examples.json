@@ -1,5 +1,5 @@
 {
-  "model": "deepseek-chat",
+  "model": "claude-sonnet-4-6",
   "examples": [
     {
       "prompt": "请根据我仓库里的 SKILL.md 帮我执行上传，并告诉我你要确认哪些字段。",
@@ -20,7 +20,7 @@
           "content": "我会先读取 `SKILL.md` 的 frontmatter，列出缺失项；请你确认一条「最终用户会如何提问」的测试案例。然后运行 `skill-market-cli upload <skill 目录>`，在交互中补全字段并自动采集轨迹后提交到 Skill Market。"
         }
       ],
-      "model": "deepseek-chat"
+      "model": "claude-sonnet-4-6"
     }
   ]
 }

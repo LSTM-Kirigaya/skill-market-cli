@@ -126,6 +126,32 @@ class ApiClient {
     return response.data;
   }
 
+  // SkillTag API
+  async searchSkillTags(keyword) {
+    const response = await this.client.get('/skill/tags/search', {
+      params: { keyword }
+    });
+    return response.data;
+  }
+
+  async createSkillTag(nameZh, nameEn) {
+    const response = await this.client.post('/skill/tags/create', {
+      nameZh,
+      nameEn
+    });
+    return response.data;
+  }
+
+  async getAllSkillTags() {
+    const response = await this.client.get('/skill/tags');
+    return response.data;
+  }
+
+  async resolveSkillTags(tags) {
+    const response = await this.client.post('/skill/tags/resolve', { tags });
+    return response.data;
+  }
+
   // OAuth API
   async getUserInfo() {
     const serverConfig = getServerConfig();
