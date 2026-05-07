@@ -2,6 +2,7 @@ const axios = require('axios');
 const chalk = require('chalk');
 const { getToken, isLoggedIn, getServerConfig, getPersonalAccessToken, printLoginHelp } = require('../auth/token-store');
 const { refreshAccessToken } = require('../auth/oauth');
+const { getUserAgent } = require('../lib/detect-environment');
 
 class ApiClient {
   constructor() {
@@ -19,7 +20,8 @@ class ApiClient {
       baseURL: serverConfig.apiBase,
       timeout: 30000,
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': getUserAgent()
       }
     });
 

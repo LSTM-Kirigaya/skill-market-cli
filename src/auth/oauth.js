@@ -40,7 +40,17 @@ async function getOAuthConfig() {
   };
 }
 
-function startCallbackServer() {
+function escapeHtml(text) {
+  if (text == null) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function startCallbackServer(expectedState) {
   let resolveCode;
   let rejectCode;
 
@@ -52,6 +62,7 @@ function startCallbackServer() {
   const server = http.createServer((req, res) => {
     let pathname;
     let code;
+    let state;
     let error;
     let error_description;
     try {
@@ -59,6 +70,7 @@ function startCallbackServer() {
       const u = new URL(req.url || '/', base);
       pathname = u.pathname;
       code = u.searchParams.get('code');
+      state = u.searchParams.get('state');
       error = u.searchParams.get('error');
       error_description = u.searchParams.get('error_description');
     } catch {
@@ -77,7 +89,7 @@ function startCallbackServer() {
       res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>授权未通过</title></head>
 <body style="font-family:sans-serif;text-align:center;padding:48px;">
-<h1>授权未通过</h1><p>${error_description || error}</p><p>请关闭此窗口，回到终端继续操作。</p>
+<h1>授权未通过</h1><p>${escapeHtml(error_description) || escapeHtml(error)}</p><p>请关闭此窗口，回到终端继续操作。</p>
 </body></html>`);
       server.close();
       rejectCode(new Error(error_description || error));
@@ -85,6 +97,16 @@ function startCallbackServer() {
     }
 
     if (code) {
+      if (expectedState && state !== expectedState) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>授权失败</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:48px;">
+<h1>授权失败</h1><p>state 验证失败，可能存在 CSRF 攻击风险。</p><p>请关闭此窗口，回到终端重新登录。</p>
+</body></html>`);
+        server.close();
+        rejectCode(new Error('OAuth state mismatch'));
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>授权完成</title></head>
 <body style="font-family:sans-serif;text-align:center;padding:48px;">
@@ -100,7 +122,7 @@ function startCallbackServer() {
   });
 
   return new Promise((resolve, reject) => {
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const actualPort = server.address().port;
       console.log(chalk.gray(`本地回调服务已启动，端口：${actualPort}`));
       resolve({ port: actualPort, codePromise });
@@ -131,10 +153,9 @@ async function login(options = {}) {
 
   const oauthConfig = await getOAuthConfig();
 
-  const { port, codePromise } = await startCallbackServer();
-  const redirectUri = `http://localhost:${port}/callback`;
-
   const state = generateRandomString(16);
+  const { port, codePromise } = await startCallbackServer(state);
+  const redirectUri = `http://localhost:${port}/callback`;
   const authorizeURL = oauthConfig.authorizeURL || `${serverConfig.baseURL}/oauth/authorize`;
   const authUrl = new URL(authorizeURL);
   authUrl.searchParams.set('response_type', 'code');

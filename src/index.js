@@ -13,6 +13,7 @@ const token = require('./commands/token');
 const { getConfig } = require('./auth/token-store');
 const { applyServerMode, getServerModesHelp } = require('./config/server-modes');
 const apiClient = require('./api/client');
+const { getRecommendedModel } = require('./lib/detect-environment');
 
 const program = new Command();
 
@@ -94,7 +95,8 @@ program
   .option('-d, --description <desc>', 'Skill description/purpose')
   .option('-t, --tags <tags>', 'Tags (comma separated)')
   .option('-m, --model <model>', 'Recommended model')
-  .option('-y, --yes', '非交互：跳过最终确认，适合脚本/CI')
+  .option('-y, --yes', '跳过最终确认')
+  .option('--non-interactive', '完全非交互模式：自动填充默认值，必填缺失时报错退出（适合脚本/CI）')
   .action(upload);
 
 // Update command
@@ -106,6 +108,9 @@ program
   .option('-n, --name <name>', 'Skill name')
   .option('-d, --description <desc>', 'Skill description')
   .option('-t, --tags <tags>', 'Tags (comma separated)')
+  .option('-m, --model <model>', 'Recommended model')
+  .option('-y, --yes', '跳过确认')
+  .option('--non-interactive', '完全非交互模式（适合脚本/CI）')
   .action(update);
 
 // Delete command
@@ -121,7 +126,7 @@ program
   .command('run-example <path>')
   .alias('run')
   .description('Run user examples and collect AI responses')
-  .option('-m, --model <model>', 'Model to use for running examples', 'claude-3-5-sonnet')
+  .option('-m, --model <model>', 'Model to use for running examples', getRecommendedModel())
   .option('--skip-confirm', 'Skip confirmation for each example')
   .action(runExample);
 

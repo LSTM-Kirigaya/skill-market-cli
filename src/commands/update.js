@@ -5,6 +5,7 @@ const inquirer = require('inquirer');
 const YAML = require('yaml');
 const { isLoggedIn, getPersonalAccessToken, printLoginHelp } = require('../auth/token-store');
 const apiClient = require('../api/client');
+const { getRecommendedModel } = require('../lib/detect-environment');
 
 async function update(skillId, options) {
   if (!isLoggedIn() && !getPersonalAccessToken()) {
@@ -68,16 +69,18 @@ async function update(skillId, options) {
     console.log(`Examples: ${usageExamples?.length || 0}`);
     console.log();
 
-    const { confirm } = await inquirer.prompt([{
-      type: 'confirm',
-      name: 'confirm',
-      message: 'Update this skill?',
-      default: true
-    }]);
+    if (!options.yes && !options.nonInteractive) {
+      const { confirm } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'confirm',
+        message: 'Update this skill?',
+        default: true
+      }]);
 
-    if (!confirm) {
-      console.log(chalk.yellow('Update cancelled.\n'));
-      return;
+      if (!confirm) {
+        console.log(chalk.yellow('Update cancelled.\n'));
+        return;
+      }
     }
 
     // 执行更新（走后端 /skill/ai/update：全字段非空、tags 与 usageExamples 不可为空数组）
@@ -87,8 +90,9 @@ async function update(skillId, options) {
       Array.isArray(tags) && tags.length > 0
         ? tags.map((t) => String(t).trim()).filter(Boolean)
         : ['general'];
+    const defaultModel = getRecommendedModel();
     const modelFinal =
-      model && String(model).trim() ? String(model).trim() : '';
+      model && String(model).trim() ? String(model).trim() : defaultModel;
     const rootUrlFinal =
       existingSkill.rootUrl && String(existingSkill.rootUrl).trim()
         ? String(existingSkill.rootUrl).trim()
